@@ -2,13 +2,14 @@
 
 import os
 import signal
-import subprocess
 import sys
+import time
 
 from pynput import keyboard
 
 from ..config import Config
-from .clipboard import get_selection, set_clipboard
+from .clipboard import get_clipboard, paste, set_clipboard
+from .renderer import PromptRenderer
 
 
 class Daemon:
@@ -38,20 +39,31 @@ class Daemon:
         return mapping
 
     def _handle_hotkey(self, prompt_name):
-        """Execute hotkey action."""
+        """Execute hotkey action: render prompt and paste into active window."""
         try:
-            selected = get_selection()
-            prompt_content = self.config.load_prompt(prompt_name)
-            full_prompt = f"{prompt_content}\n\n{selected}"
-            result = subprocess.run(
-                ["claude", "-p", full_prompt],
-                capture_output=True,
-                text=True,
-                check=True,
-            )
-            output = result.stdout.strip()
-            set_clipboard(output)
-            print("Result copied to clipboard.")
+            # Save current clipboard
+            original_clipboard = get_clipboard()
+
+            # Load and render prompt template
+            template = self.config.load_prompt(prompt_name)
+            renderer = PromptRenderer()
+            rendered = renderer.render(template, clipboard=original_clipboard)
+
+            # Set clipboard to rendered prompt
+            set_clipboard(rendered)
+
+            # Small delay to ensure clipboard is set
+            time.sleep(0.05)
+
+            # Paste into active window
+            paste()
+
+            # Small delay before restoring
+            time.sleep(0.05)
+
+            # Restore original clipboard
+            set_clipboard(original_clipboard)
+
         except Exception as e:
             print(f"Error in hotkey handler: {e}", file=sys.stderr)
 

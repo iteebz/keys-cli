@@ -1,51 +1,54 @@
-# keys/clipboard.py
+"""Cross-platform clipboard operations."""
+
 import platform
 import subprocess
-import time
 
 
-def get_selection() -> str:
-    """Get selected text from system."""
+def get_clipboard() -> str:
+    """Read current clipboard contents without modification."""
     system = platform.system()
 
-    if system == "Darwin":  # macOS
-        # Simulate copy, then read clipboard
-        # This requires 'osascript' and 'pbpaste'
+    if system == "Darwin":
+        return subprocess.check_output(["pbpaste"], text=True)
+
+    if system == "Linux":
+        try:
+            return subprocess.check_output(["xclip", "-o", "-selection", "clipboard"], text=True)
+        except subprocess.CalledProcessError:
+            return ""
+
+    raise NotImplementedError(f"Platform not supported: {system}")
+
+
+def set_clipboard(text: str) -> None:
+    """Write text to clipboard."""
+    system = platform.system()
+
+    if system == "Darwin":
+        subprocess.run(["pbcopy"], input=text, text=True, check=True)
+    elif system == "Linux":
+        subprocess.run(["xclip", "-selection", "clipboard"], input=text, text=True, check=True)
+    else:
+        raise NotImplementedError(f"Platform not supported: {system}")
+
+
+def paste() -> None:
+    """Simulate paste keystroke in active window."""
+    system = platform.system()
+
+    if system == "Darwin":
         subprocess.run(
             [
                 "osascript",
                 "-e",
-                'tell application "System Events" to keystroke "c" using command down',
+                'tell application "System Events" to keystroke "v" using command down',
             ],
             check=True,
         )
-        time.sleep(0.1)  # Give clipboard time to update
-        return subprocess.check_output(["pbpaste"], text=True).strip()
-
-    if system == "Linux":
-        # This requires 'xclip' or 'xsel'
-        # Try primary selection first, fall back to clipboard
-        try:
-            return subprocess.check_output(
-                ["xclip", "-o", "-selection", "primary"], text=True
-            ).strip()
-        except subprocess.CalledProcessError:
-            return subprocess.check_output(
-                ["xclip", "-o", "-selection", "clipboard"], text=True
-            ).strip()
-
-    raise NotImplementedError(f"Platform not supported for getting selection: {system}")
-
-
-def set_clipboard(text: str):
-    """Copy text to clipboard."""
-    system = platform.system()
-
-    if system == "Darwin":
-        # This requires 'pbcopy'
-        subprocess.run(["pbcopy"], input=text, text=True, check=True)
     elif system == "Linux":
-        # This requires 'xclip' or 'xsel'
-        subprocess.run(["xclip", "-selection", "clipboard"], input=text, text=True, check=True)
+        subprocess.run(
+            ["xdotool", "key", "ctrl+v"],
+            check=True,
+        )
     else:
-        raise NotImplementedError(f"Platform not supported for setting clipboard: {system}")
+        raise NotImplementedError(f"Platform not supported: {system}")

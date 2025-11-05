@@ -17,7 +17,7 @@ ci:
     @poetry build
 
 test:
-    @poetry run pytest tests -q
+    @poetry run pytest tests
 
 run:
     @poetry run keys
@@ -33,9 +33,6 @@ fix:
 
 build:
     @poetry build
-
-repomix:
-    repomix
 
 commits:
     @git --no-pager log --pretty=format:"%h | %ar | %s"

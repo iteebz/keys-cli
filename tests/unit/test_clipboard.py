@@ -3,7 +3,7 @@ from unittest.mock import patch
 
 import pytest
 
-from keys.lib.clipboard import get_selection, set_clipboard
+from keys.lib.clipboard import get_clipboard, paste, set_clipboard
 
 
 @pytest.fixture(autouse=True)
@@ -14,27 +14,15 @@ def mock_platform_system():
 
 
 class TestClipboard:
-    @patch("subprocess.run")
     @patch("subprocess.check_output")
-    @patch("time.sleep", return_value=None)  # Mock time.sleep to speed up tests
-    def test_get_selection_macos(
-        self, mock_sleep, mock_check_output, mock_run, mock_platform_system
-    ):
+    def test_get_clipboard_macos(self, mock_check_output, mock_platform_system):
         mock_platform_system.return_value = "Darwin"
-        mock_check_output.return_value = "selected text from macos"
+        mock_check_output.return_value = "clipboard content from macos"
 
-        result = get_selection()
+        result = get_clipboard()
 
-        mock_run.assert_called_once_with(
-            [
-                "osascript",
-                "-e",
-                'tell application "System Events" to keystroke "c" using command down',
-            ],
-            check=True,
-        )
         mock_check_output.assert_called_once_with(["pbpaste"], text=True)
-        assert result == "selected text from macos"
+        assert result == "clipboard content from macos"
 
     @patch("subprocess.run")
     def test_set_clipboard_macos(self, mock_run, mock_platform_system):
@@ -45,38 +33,25 @@ class TestClipboard:
 
         mock_run.assert_called_once_with(["pbcopy"], input=text_to_copy, text=True, check=True)
 
-    @patch("subprocess.run")
     @patch("subprocess.check_output")
-    def test_get_selection_linux_primary(self, mock_check_output, mock_run, mock_platform_system):
+    def test_get_clipboard_linux(self, mock_check_output, mock_platform_system):
         mock_platform_system.return_value = "Linux"
-        mock_check_output.return_value = "selected text from linux primary"
+        mock_check_output.return_value = "clipboard content from linux"
 
-        result = get_selection()
+        result = get_clipboard()
 
         mock_check_output.assert_called_once_with(
-            ["xclip", "-o", "-selection", "primary"], text=True
+            ["xclip", "-o", "-selection", "clipboard"], text=True
         )
-        assert result == "selected text from linux primary"
+        assert result == "clipboard content from linux"
 
-    @patch("subprocess.run")
-    @patch(
-        "subprocess.check_output",
-        side_effect=[
-            subprocess.CalledProcessError(1, "xclip"),
-            "selected text from linux clipboard",
-        ],
-    )
-    def test_get_selection_linux_clipboard_fallback(
-        self, mock_check_output, mock_run, mock_platform_system
-    ):
+    @patch("subprocess.check_output", side_effect=subprocess.CalledProcessError(1, "xclip"))
+    def test_get_clipboard_linux_empty_on_error(self, mock_check_output, mock_platform_system):
         mock_platform_system.return_value = "Linux"
 
-        result = get_selection()
+        result = get_clipboard()
 
-        assert mock_check_output.call_count == 2
-        mock_check_output.assert_any_call(["xclip", "-o", "-selection", "primary"], text=True)
-        mock_check_output.assert_any_call(["xclip", "-o", "-selection", "clipboard"], text=True)
-        assert result == "selected text from linux clipboard"
+        assert result == ""
 
     @patch("subprocess.run")
     def test_set_clipboard_linux(self, mock_run, mock_platform_system):
@@ -89,16 +64,40 @@ class TestClipboard:
             ["xclip", "-selection", "clipboard"], input=text_to_copy, text=True, check=True
         )
 
-    def test_get_selection_unsupported_platform(self, mock_platform_system):
+    @patch("subprocess.run")
+    def test_paste_macos(self, mock_run, mock_platform_system):
+        mock_platform_system.return_value = "Darwin"
+
+        paste()
+
+        mock_run.assert_called_once_with(
+            [
+                "osascript",
+                "-e",
+                'tell application "System Events" to keystroke "v" using command down',
+            ],
+            check=True,
+        )
+
+    @patch("subprocess.run")
+    def test_paste_linux(self, mock_run, mock_platform_system):
+        mock_platform_system.return_value = "Linux"
+
+        paste()
+
+        mock_run.assert_called_once_with(["xdotool", "key", "ctrl+v"], check=True)
+
+    def test_get_clipboard_unsupported_platform(self, mock_platform_system):
         mock_platform_system.return_value = "Windows"
-        with pytest.raises(
-            NotImplementedError, match="Platform not supported for getting selection: Windows"
-        ):
-            get_selection()
+        with pytest.raises(NotImplementedError, match="Platform not supported: Windows"):
+            get_clipboard()
 
     def test_set_clipboard_unsupported_platform(self, mock_platform_system):
         mock_platform_system.return_value = "Windows"
-        with pytest.raises(
-            NotImplementedError, match="Platform not supported for setting clipboard: Windows"
-        ):
+        with pytest.raises(NotImplementedError, match="Platform not supported: Windows"):
             set_clipboard("some text")
+
+    def test_paste_unsupported_platform(self, mock_platform_system):
+        mock_platform_system.return_value = "Windows"
+        with pytest.raises(NotImplementedError, match="Platform not supported: Windows"):
+            paste()
